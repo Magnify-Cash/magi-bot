@@ -1,0 +1,5 @@
+version: "3"
+
+tasks:
+  start:
+    cmd: poetry run python3 telegram_bot.py
