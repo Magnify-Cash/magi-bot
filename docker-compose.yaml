@@ -1,0 +1,5 @@
+services:
+  defillama-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile

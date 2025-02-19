@@ -1,5 +1,3 @@
-from langchain_openai import ChatOpenAI
-from pydantic.v1 import SecretStr
 import structlog
 from telegram import Update
 from telegram.ext import (
@@ -9,22 +7,15 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from agent import run_agent
 from config import config
+import telegram
 
 log = structlog.stdlib.get_logger()
 
-llm = ChatOpenAI(
-    model="gpt-4o",
-    temperature=0,
-    max_tokens=None,
-    timeout=None,
-    max_retries=3,
-    api_key=SecretStr(config.openai_api_key),
-)
-
 
 async def say_hello(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    log.info("Saying hello", update=update, context=context)
+    log.info("Saying hello", update=update)
     if not update.message:
         log.error("Update message is None")
         return
@@ -47,18 +38,25 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    log.info("Handling message", update=update, context=context)
+    log.info("Handling message", update=update)
 
     if not update.message or not update.message.text:
         log.error("Update message or text is None")
         return
 
     try:
-        response = llm.invoke(update.message.text)
-        assert isinstance(response.content, str)
-        await update.message.reply_text(response.content)
+        response = await run_agent(update.message.text)
+        try:
+            await update.message.reply_text(response, parse_mode="HTML")
+        except telegram.error.BadRequest as e:
+            # Fallback to plain text if markdown parsing fails
+            await update.message.reply_text(
+                f"Error with markdown formatting. Sending as plain text:\n\n{response}"
+            )
+            log.exception("Error with Telegram response", response=response, error=e)
+
     except Exception as e:
-        log.error("Error generating response", error=str(e))
+        log.exception("Error generating response", error=e)
         await update.message.reply_text(
             "Sorry, I encountered an error processing your request."
         )
